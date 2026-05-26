@@ -140,8 +140,19 @@ jobs:
           set -Eeuo pipefail
           ORIG_SHA=$(git rev-parse HEAD)
 
-          git rm -r --ignore-unmatch examples
-          git commit -m "release(${BUILD_VER}): exclude examples from release"
+          paths_arr=()
+          while IFS= read -r -d '' path; do
+            paths_arr+=("$path")
+          done < <(
+            git ls-files -z \
+              | grep -zE '^(examples/|\.github/|_run/)|\.[mM][dD]$' || true
+          )
+
+          if [ "${#paths_arr[@]}" -gt 0 ]; then
+            git rm -r --ignore-unmatch -- "${paths_arr[@]}"
+            git commit -m "release(${BUILD_VER}): strip non-release files"
+          fi
+
           git tag -a "${BUILD_VER}" -m "Release ${BUILD_VER}"
           git push origin "${BUILD_VER}"
 
