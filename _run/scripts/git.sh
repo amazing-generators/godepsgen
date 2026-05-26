@@ -96,10 +96,7 @@ create_file(){
   local file_hook=$2
 
   echo '#!/bin/bash' > "${hooks_dir}/$file_name"
-  echo 'set -Eeuo pipefail' >> "${hooks_dir}/$file_name"
-  echo 'hook_dir="$(cd "$(dirname "$0")" && pwd)"' >> "${hooks_dir}/$file_name"
-  echo 'repo_root="$(cd "$hook_dir/../.." && pwd)"' >> "${hooks_dir}/$file_name"
-  echo "bash \"\$repo_root/_run/$file_hook\" \"\$@\"" >> "${hooks_dir}/$file_name"
+  echo "bash _run/$file_hook" '$1' >> "${hooks_dir}/$file_name"
 
   chmod +x "${hooks_dir}/$file_name"
   info "ADD '$file_name'"
@@ -172,4 +169,5 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 exit 1
+
 
