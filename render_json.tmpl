@@ -1,0 +1,33 @@
+{
+"generated_at": {{ jsonQuote .GeneratedAt }},
+"source_root": {{ jsonQuote .SourceRoot }},
+"mod_file": {{ jsonQuote .ModFile }},
+"modules": {
+{{- range $index, $item := .Modules }}
+    {{- if gt $index 0 }},{{ end }}
+    {{ jsonQuote $item.Key }}: {{ jsonQuote $item.Value }}
+{{- end }}
+},
+"versions": {
+{{- range $index, $item := .Versions }}
+    {{- if gt $index 0 }},{{ end }}
+    {{ jsonQuote $item.Key }}: {{ jsonQuote $item.Value }}
+{{- end }}
+},
+"licenses": {
+{{- range $index, $item := .Licenses }}
+    {{- if gt $index 0 }},{{ end }}
+    {{ jsonQuote $item.Key }}: {{ jsonQuote $item.Value }}
+{{- end }}
+},
+"items": [
+{{- range $index, $item := .Items }}
+    {{- if gt $index 0 }},{{ end }}
+    {
+    "module": {{ jsonQuote $item.ModuleKey }},
+    "version": {{ jsonQuote $item.VersionKey }},
+    "license": {{ jsonQuote $item.LicenseKey }}
+    }
+{{- end }}
+]
+}

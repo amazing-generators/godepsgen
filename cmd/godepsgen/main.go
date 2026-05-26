@@ -14,9 +14,9 @@ func main() {
 	config := godepsgen.ConfigObj{}
 
 	flag.StringVar(&config.Source, "source", "", "source root or go.mod path; default is current working directory")
-	flag.StringVar(&config.OutputFile, "out", "", "output file path; required unless stdout is enabled")
+	flag.StringVar(&config.OutputFile, "out", "", "output file or directory path; if omitted, the file is created in the current working directory")
 	flag.StringVar(&config.PackageName, "pkg", "", "package name for generated Go file")
-	flag.StringVar(&config.Format, "format", "go", "output format: go or json")
+	flag.StringVar(&config.Format, "format", "go", "output format: go, json, yaml, or yml")
 	flag.BoolVar(&config.Stdout, "stdout", false, "write output to stdout instead of a file")
 	flag.BoolVar(&config.SkipLicenses, "skip-licenses", false, "generate versions only with empty licenses")
 	flag.BoolVar(&config.Force, "force", false, "create missing output directories; without it a missing directory is an error")
@@ -38,5 +38,5 @@ func main() {
 		return
 	}
 
-	_, _ = fmt.Fprintln(os.Stdout, "Generated:", config.OutputFile)
+	_, _ = fmt.Fprintln(os.Stdout, "Generated:", result.OutputFile)
 }

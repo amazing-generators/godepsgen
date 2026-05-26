@@ -4,13 +4,29 @@
 
 package {{ .PackageName }}
 
+{{- if .HasEmbeddedLicenses }}
 import (
 "bytes"
 "compress/flate"
 "io"
 )
+{{- end }}
 
 // // // // // // // // // //
+
+const (
+{{- range .Modules }}
+    {{ .Name }} = {{ quote .Value }}
+{{- end }}
+)
+
+const (
+{{- range .Versions }}
+    {{ .Name }} = {{ quote .Value }}
+{{- end }}
+)
+
+// //
 
 type LicenseObj struct {
 compressedData []byte
@@ -23,9 +39,22 @@ Version string
 License *LicenseObj
 }
 
+//
+
+var (
+{{- range .Licenses }}
+    {{- if .Empty }}
+        {{ .Name }} = LicenseObj{isEmpty: true}
+    {{- else }}
+        {{ .Name }} = LicenseObj{compressedData: []byte{ {{ hexBytes .Data }} }}
+    {{- end }}
+{{- end }}
+)
+
 // //
 
 func (item *LicenseObj) String() string {
+{{- if .HasEmbeddedLicenses }}
 if item == nil || item.isEmpty {
 return ""
 }
@@ -36,34 +65,27 @@ defer reader.Close()
 var out bytes.Buffer
 _, _ = io.Copy(&out, reader)
 return out.String()
+{{- else }}
+    return ""
+{{- end }}
 }
 
 // //
 
-var (
-{{- range .Licenses }}
-    {{- if .Empty }}
-        license_{{ .Hash }} = LicenseObj{isEmpty: true}
-    {{- else }}
-        license_{{ .Hash }} = LicenseObj{compressedData: []byte{ {{ hexBytes .Data }} }}
-    {{- end }}
-{{- end }}
-)
-
 var List = []EntryObj{
 {{- range .Entries }}
-    {Module: {{ quote .Module }}, Version: {{ quote .Version }}, License: &license_{{ .Hash }}},
+    {Module: {{ .ModuleConst }}, Version: {{ .VersionConst }}, License: &{{ .LicenseVar }}},
 {{- end }}
 }
 
 var VersionByModule = map[string]string{
 {{- range .Entries }}
-    {{ quote .Module }}: {{ quote .Version }},
+    {{ .ModuleConst }}: {{ .VersionConst }},
 {{- end }}
 }
 
 var LicenseByModule = map[string]*LicenseObj{
 {{- range .Entries }}
-    {{ quote .Module }}: &license_{{ .Hash }},
+    {{ .ModuleConst }}: &{{ .LicenseVar }},
 {{- end }}
 }

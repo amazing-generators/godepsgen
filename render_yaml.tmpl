@@ -1,0 +1,7 @@
+generated_at: {{ yamlInline .GeneratedAt }}
+source_root: {{ yamlInline .SourceRoot }}
+mod_file: {{ yamlInline .ModFile }}
+{{- if .Modules }}{{ "\nmodules:" }}{{- range .Modules }}{{ "\n  " }}{{ .Key }}: &module_{{ .Key }} {{ yamlInline .Value }}{{- end }}{{- else }}{{ "\nmodules: {}" }}{{- end }}
+{{- if .Versions }}{{ "\nversions:" }}{{- range .Versions }}{{ "\n  " }}{{ .Key }}: &version_{{ .Key }} {{ yamlInline .Value }}{{- end }}{{- else }}{{ "\nversions: {}" }}{{- end }}
+{{- if .Licenses }}{{ "\nlicenses:" }}{{- range .Licenses }}{{ "\n  " }}{{ .Key }}: &license_{{ .Key }} {{ yamlValue .Value 4 }}{{- end }}{{- else }}{{ "\nlicenses: {}" }}{{- end }}
+{{- if .Items }}{{ "\nitems:" }}{{- range .Items }}{{ "\n  - module: *module_" }}{{ .ModuleKey }}{{ "\n    version: *version_" }}{{ .VersionKey }}{{ "\n    license: *license_" }}{{ .LicenseKey }}{{- end }}{{- else }}{{ "\nitems: []" }}{{- end }}

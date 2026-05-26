@@ -3,12 +3,9 @@ package godepsgen
 import (
 	"bytes"
 	"compress/flate"
-	"crypto/sha256"
 	_ "embed"
-	"encoding/hex"
 	"fmt"
 	"go/format"
-	"sort"
 	"strings"
 	"text/template"
 )
@@ -18,7 +15,6 @@ import (
 //go:embed render_go.tmpl
 var goTemplateText string
 
-// Parsed once at package init and reused for every render call.
 var goTemplate = template.Must(template.New("dependencies-go").Funcs(template.FuncMap{
 	"quote":    strconvQuote,
 	"hexBytes": renderHexBytes,
@@ -26,55 +22,59 @@ var goTemplate = template.Must(template.New("dependencies-go").Funcs(template.Fu
 
 // //
 
-type packedLicenseObj struct {
-	Hash  string
+type goStringConstObj struct {
+	Name  string
+	Value string
+}
+
+type goEntryObj struct {
+	ModuleConst  string
+	VersionConst string
+	LicenseVar   string
+}
+
+type goLicenseObj struct {
+	Name  string
 	Data  []byte
 	Empty bool
 }
 
-type goEntryObj struct {
-	Module  string
-	Version string
-	Hash    string
-}
-
 type goTemplateDataObj struct {
-	PackageName string
-	ModFile     string
-	GeneratedAt string
-	Licenses    []packedLicenseObj
-	Entries     []goEntryObj
+	PackageName         string
+	ModFile             string
+	GeneratedAt         string
+	Modules             []goStringConstObj
+	Versions            []goStringConstObj
+	Licenses            []goLicenseObj
+	Entries             []goEntryObj
+	HasEmbeddedLicenses bool
 }
 
 // //
 
-func packLicense(licenseText string) (string, []byte, error) {
-	hashArr := sha256.Sum256([]byte(licenseText))
-	hashValue := hex.EncodeToString(hashArr[:])[:16]
-
+func compressLicense(licenseText string) ([]byte, error) {
 	if licenseText == "" {
-		return hashValue, nil, nil
+		return nil, nil
 	}
 
 	var buffer bytes.Buffer
 	writer, err := flate.NewWriter(&buffer, flate.BestCompression)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
 	if _, err = writer.Write([]byte(licenseText)); err != nil {
 		_ = writer.Close()
-		return "", nil, err
+		return nil, err
 	}
 
 	if err = writer.Close(); err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	return hashValue, buffer.Bytes(), nil
+	return buffer.Bytes(), nil
 }
 
-// Emits the []byte literal, wrapping every 24 values so big licenses stay readable.
 func renderHexBytes(dataArr []byte) string {
 	if len(dataArr) == 0 {
 		return ""
@@ -102,52 +102,74 @@ func strconvQuote(value string) string {
 // //
 
 func renderGo(report *ReportObj, packageName string) ([]byte, error) {
-	packedMap := make(map[string]packedLicenseObj)
-	hashByModuleMap := make(map[string]string, len(report.Items))
+	compactReport := buildCompactReport(report)
 
-	for _, item := range report.Items {
-		hashValue, compressedData, err := packLicense(item.License)
+	modulesArr := make([]goStringConstObj, 0, len(compactReport.Modules))
+	versionsArr := make([]goStringConstObj, 0, len(compactReport.Versions))
+	licensesArr := make([]goLicenseObj, 0, len(compactReport.Licenses))
+	entriesArr := make([]goEntryObj, 0, len(compactReport.Items))
+
+	moduleConstByKeyMap := make(map[string]string, len(compactReport.Modules))
+	versionConstByKeyMap := make(map[string]string, len(compactReport.Versions))
+	licenseVarByKeyMap := make(map[string]string, len(compactReport.Licenses))
+	hasEmbeddedLicensesFlag := false
+
+	for index, item := range compactReport.Modules {
+		constName := fmt.Sprintf("cModule%d", index)
+		moduleConstByKeyMap[item.Key] = constName
+
+		modulesArr = append(modulesArr, goStringConstObj{
+			Name:  constName,
+			Value: item.Value,
+		})
+	}
+
+	for index, item := range compactReport.Versions {
+		constName := fmt.Sprintf("cVersion%d", index)
+		versionConstByKeyMap[item.Key] = constName
+
+		versionsArr = append(versionsArr, goStringConstObj{
+			Name:  constName,
+			Value: item.Value,
+		})
+	}
+
+	for index, item := range compactReport.Licenses {
+		compressedData, err := compressLicense(item.Value)
 		if err != nil {
-			return nil, fmt.Errorf("pack license for %s: %w", item.Module, err)
+			return nil, fmt.Errorf("pack license %s: %w", item.Key, err)
+		}
+		if item.Value != "" {
+			hasEmbeddedLicensesFlag = true
 		}
 
-		hashByModuleMap[item.Module] = hashValue
-		// Identical licenses (e.g. MIT across many modules) are embedded once, keyed by hash.
-		if _, ok := packedMap[hashValue]; ok {
-			continue
-		}
+		varName := fmt.Sprintf("license%d", index)
+		licenseVarByKeyMap[item.Key] = varName
 
-		packedMap[hashValue] = packedLicenseObj{
-			Hash:  hashValue,
+		licensesArr = append(licensesArr, goLicenseObj{
+			Name:  varName,
 			Data:  compressedData,
-			Empty: item.License == "",
-		}
+			Empty: item.Value == "",
+		})
 	}
 
-	// Sort by hash for a stable declaration order in the generated output.
-	packedArr := make([]packedLicenseObj, 0, len(packedMap))
-	for _, item := range packedMap {
-		packedArr = append(packedArr, item)
-	}
-	sort.Slice(packedArr, func(leftIndex int, rightIndex int) bool {
-		return packedArr[leftIndex].Hash < packedArr[rightIndex].Hash
-	})
-
-	entriesArr := make([]goEntryObj, 0, len(report.Items))
-	for _, item := range report.Items {
+	for _, item := range compactReport.Items {
 		entriesArr = append(entriesArr, goEntryObj{
-			Module:  item.Module,
-			Version: item.Version,
-			Hash:    hashByModuleMap[item.Module],
+			ModuleConst:  moduleConstByKeyMap[item.ModuleKey],
+			VersionConst: versionConstByKeyMap[item.VersionKey],
+			LicenseVar:   licenseVarByKeyMap[item.LicenseKey],
 		})
 	}
 
 	data := goTemplateDataObj{
-		PackageName: packageName,
-		ModFile:     report.ModFile,
-		GeneratedAt: report.GeneratedAt,
-		Licenses:    packedArr,
-		Entries:     entriesArr,
+		PackageName:         packageName,
+		ModFile:             report.ModFile,
+		GeneratedAt:         report.GeneratedAt,
+		Modules:             modulesArr,
+		Versions:            versionsArr,
+		Licenses:            licensesArr,
+		Entries:             entriesArr,
+		HasEmbeddedLicenses: hasEmbeddedLicensesFlag,
 	}
 
 	var buffer bytes.Buffer

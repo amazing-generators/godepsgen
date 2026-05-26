@@ -22,6 +22,8 @@ func Run(config ConfigObj) (*ResultObj, error) {
 		dataArr, err = renderGo(report, normalizedConfig.PackageName)
 	case "json":
 		dataArr, err = renderJSON(report)
+	case "yaml":
+		dataArr, err = renderYAML(report)
 	default:
 		err = fmt.Errorf("unsupported format: %s", normalizedConfig.Format)
 	}
@@ -36,7 +38,8 @@ func Run(config ConfigObj) (*ResultObj, error) {
 	}
 
 	return &ResultObj{
-		Report: report,
-		Data:   dataArr,
+		OutputFile: normalizedConfig.OutputFile,
+		Report:     report,
+		Data:       dataArr,
 	}, nil
 }

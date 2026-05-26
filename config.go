@@ -14,8 +14,10 @@ import (
 const (
 	cDefaultFormat      = "go"
 	cDefaultPackageName = "dependenciesgen"
+	cDefaultGoOutput    = "dependencies_gen.go"
+	cDefaultJSONOutput  = "dependencies.json"
+	cDefaultYAMLOutput  = "dependencies.yml"
 
-	// DefaultLicenseMaxBytes caps the size of a single embedded license file.
 	DefaultLicenseMaxBytes = int64(5 << 20)
 )
 
@@ -48,8 +50,9 @@ type ReportObj struct {
 }
 
 type ResultObj struct {
-	Report *ReportObj
-	Data   []byte
+	OutputFile string
+	Report     *ReportObj
+	Data       []byte
 }
 
 type normalizedConfigObj struct {
@@ -74,8 +77,12 @@ func normalizeConfig(config ConfigObj) (*normalizedConfigObj, error) {
 		format = cDefaultFormat
 	}
 
+	if format == "yml" {
+		format = "yaml"
+	}
+
 	switch format {
-	case "go", "json":
+	case "go", "json", "yaml":
 	default:
 		return nil, fmt.Errorf("unsupported format: %s", format)
 	}
@@ -95,12 +102,9 @@ func normalizeConfig(config ConfigObj) (*normalizedConfigObj, error) {
 		return nil, err
 	}
 
-	outputFile := strings.TrimSpace(config.OutputFile)
-	if outputFile != "" {
-		outputFile, err = filepath.Abs(outputFile)
-		if err != nil {
-			return nil, fmt.Errorf("resolve output path: %w", err)
-		}
+	outputFile, err := resolveOutputFile(config.OutputFile, format, config.Stdout)
+	if err != nil {
+		return nil, err
 	}
 
 	packageName := strings.TrimSpace(config.PackageName)
@@ -119,10 +123,6 @@ func normalizeConfig(config ConfigObj) (*normalizedConfigObj, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve module cache root: %w", err)
 		}
-	}
-
-	if !config.Stdout && outputFile == "" {
-		return nil, errors.New("output path is required unless stdout mode is enabled")
 	}
 
 	if format != "go" && packageName != "" {
@@ -144,8 +144,59 @@ func normalizeConfig(config ConfigObj) (*normalizedConfigObj, error) {
 	}, nil
 }
 
-// Resolves the single source input into a source root and concrete go.mod path.
-// Empty source means the current working directory.
+// Пустой путь означает запись в текущую директорию с именем по умолчанию.
+// Существующая директория трактуется как каталог назначения, а не как файл.
+func resolveOutputFile(outputValue string, format string, stdout bool) (string, error) {
+	outputValue = strings.TrimSpace(outputValue)
+	if outputValue == "" && stdout {
+		return "", nil
+	}
+
+	defaultFileName := defaultOutputFileName(format)
+	if outputValue == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("read working directory: %w", err)
+		}
+		return filepath.Join(cwd, defaultFileName), nil
+	}
+
+	isDirHint := strings.HasSuffix(outputValue, string(os.PathSeparator)) || filepath.Ext(outputValue) == ""
+
+	outputPath, err := filepath.Abs(outputValue)
+	if err != nil {
+		return "", fmt.Errorf("resolve output path: %w", err)
+	}
+
+	info, err := os.Stat(outputPath)
+	if err == nil {
+		if info.IsDir() {
+			return filepath.Join(outputPath, defaultFileName), nil
+		}
+		return outputPath, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("stat output path: %w", err)
+	}
+
+	if isDirHint {
+		return filepath.Join(outputPath, defaultFileName), nil
+	}
+
+	return outputPath, nil
+}
+
+func defaultOutputFileName(format string) string {
+	switch format {
+	case "json":
+		return cDefaultJSONOutput
+	case "yaml":
+		return cDefaultYAMLOutput
+	default:
+		return cDefaultGoOutput
+	}
+}
+
 func resolveSourcePaths(source string) (string, string, error) {
 	if strings.TrimSpace(source) != "" {
 		return resolveSourceValue(source)
