@@ -131,6 +131,29 @@ go install github.com/amazing-generators/godepsgen/cmd/godepsgen@latest
 go build -o ./bin/godepsgen ./cmd/godepsgen
 ```
 
+## Repo Development
+
+The repository uses the same `_run` and generation pattern as the client-server template:
+
+- build metadata is stored in `_run/values.yml`
+- hooks and CI normalize dependencies through `go mod tidy` from the repository root
+- `gometagen generate -source . -format go -out ./target -force` writes build metadata into `target/meta_gen.go`
+- `go run ./cmd/godepsgen -out ./target/dependencies/ -force` writes a self-report into
+  `target/dependencies/dependencies_gen.go`
+
+For the first repository run, use:
+
+```bash
+./_run/firststart.sh
+```
+
+That script:
+
+- installs local development tools
+- registers git hooks
+- runs `go mod tidy`
+- runs the explicit metadata and dependency generators
+
 ## Quick Start
 
 Generate Go output into the current working directory:

@@ -1,32 +1,36 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
 echo "[HOOK]" "Push"
 
 run_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-values_dir="$run_dir/values"
-script_dir="$run_dir/scripts"
-root_path=$(cd "$run_dir/.." && pwd)
+root_path="$(cd "$run_dir/.." && pwd)"
 
 #############################################################################
 
-set -Eeuo pipefail
-cd "$root_path"
-export CGO_ENABLED=1
+(
+    cd "$root_path" || exit 1
+    export CGO_ENABLED=1
 
-if [ -f go.work ]; then
-  go work sync
-fi
-# go generate .  # Нет codegen в этом репозитории.
-./_run/scripts/go_tidy_all.sh
+    go mod tidy
 
-echo "==> Running tests with race detector..."
-go test -race -v ./...
+    old_ver="$(go run github.com/amazing-generators/gometagen/cmd/gometagen@latest version print -source "$run_dir/values.yml")"
+    version="$(go run github.com/amazing-generators/gometagen/cmd/gometagen@latest version patch -source "$run_dir/values.yml")"
 
-echo ""
-echo "==> Running benchmarks..."
-go test -bench=. -run=NONE -benchmem -v ./...
+    echo "Updated patch-ver: $old_ver >> $version"
 
-echo ""
-echo "[HOOK] All tests and benchmarks passed"
+    echo "==> Running tests with race detector..."
+    go test -race -v ./...
+
+    echo ""
+    echo "==> Running benchmarks..."
+    go test -bench=. -run=NONE -benchmem -v ./...
+
+    echo ""
+    echo "[HOOK] All tests, benchmarks and generators passed"
+)
 
 #############################################################################
+
 exit 0

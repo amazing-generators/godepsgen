@@ -86,10 +86,10 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          new_ver=$(./_run/scripts/sys.sh --increment --minor)
+          new_ver=$(go run github.com/amazing-generators/gometagen/cmd/gometagen@latest version minor -source ./_run/values.yml)
           echo "New version: $new_ver"
 
-          git add _run/values/ver.txt
+          git add _run/values.yml
           git commit -m "minor(${new_ver}): release"
           git push origin HEAD:main
 

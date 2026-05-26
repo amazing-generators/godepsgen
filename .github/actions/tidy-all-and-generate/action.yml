@@ -1,18 +1,11 @@
 name: 'Initialization of all packages'
-description: 'Initialize all the modules and normalize dependencies'
+description: 'Initialize all the modules and generate files'
 
 runs:
   using: 'composite'
   steps:
-    - name: 🛠️ Prepare workspace
+    - name: 📥 go mod tidy
       shell: bash
       run: |
         set -Eeuo pipefail
-        mkdir -p target tmp
-        if [[ -f go.work ]]; then
-          go work sync
-        fi
-
-    - name: 📥 go mod tidy-all
-      shell: bash
-      run: ./_run/scripts/go_tidy_all.sh
+        go mod tidy
