@@ -28,6 +28,48 @@ type compactJSONReportObj struct {
 
 // //
 
+func canonicalPath(t *testing.T, pathValue string) string {
+	t.Helper()
+
+	absolutePath, err := filepath.Abs(pathValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resolvedPath, err := filepath.EvalSymlinks(absolutePath); err == nil {
+		return resolvedPath
+	}
+
+	parentDir := filepath.Dir(absolutePath)
+	if parentDir == absolutePath {
+		return absolutePath
+	}
+
+	resolvedParentDir, err := filepath.EvalSymlinks(parentDir)
+	if err == nil {
+		return filepath.Join(resolvedParentDir, filepath.Base(absolutePath))
+	}
+
+	return absolutePath
+}
+
+func assertSamePath(t *testing.T, actualPath string, expectedPath string) {
+	t.Helper()
+
+	normalizedActualPath := canonicalPath(t, actualPath)
+	normalizedExpectedPath := canonicalPath(t, expectedPath)
+
+	if normalizedActualPath != normalizedExpectedPath {
+		t.Fatalf(
+			"unexpected path:\nactual: %s\nexpected: %s",
+			actualPath,
+			expectedPath,
+		)
+	}
+}
+
+// //
+
 func decodeCompactJSON(t *testing.T, dataArr []byte) compactJSONReportObj {
 	t.Helper()
 
@@ -237,14 +279,10 @@ func TestResolveSourcePathsFromDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if sourceRoot != rootDir {
-		t.Fatalf("unexpected source root: %s", sourceRoot)
-	}
+	assertSamePath(t, sourceRoot, rootDir)
 
 	expectedModFile := filepath.Join(rootDir, "go.mod")
-	if modFile != expectedModFile {
-		t.Fatalf("unexpected mod file: %s", modFile)
-	}
+	assertSamePath(t, modFile, expectedModFile)
 }
 
 func TestResolveSourcePathsFromModFile(t *testing.T) {
@@ -260,13 +298,8 @@ func TestResolveSourcePathsFromModFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if sourceRoot != rootDir {
-		t.Fatalf("unexpected source root: %s", sourceRoot)
-	}
-
-	if modFile != modFilePath {
-		t.Fatalf("unexpected mod file: %s", modFile)
-	}
+	assertSamePath(t, sourceRoot, rootDir)
+	assertSamePath(t, modFile, modFilePath)
 }
 
 func TestResolveSourcePathsFromWorkingDir(t *testing.T) {
@@ -289,14 +322,10 @@ func TestResolveSourcePathsFromWorkingDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if sourceRoot != rootDir {
-		t.Fatalf("unexpected source root: %s", sourceRoot)
-	}
+	assertSamePath(t, sourceRoot, rootDir)
 
 	expectedModFile := filepath.Join(rootDir, "go.mod")
-	if modFile != expectedModFile {
-		t.Fatalf("unexpected mod file: %s", modFile)
-	}
+	assertSamePath(t, modFile, expectedModFile)
 }
 
 func TestRunGoSkipLicenses(t *testing.T) {
@@ -432,9 +461,7 @@ func TestRunUsesWorkingDirWhenOutputIsOmitted(t *testing.T) {
 	}
 
 	expectedOutputFile := filepath.Join(workDir, "dependencies_gen.go")
-	if result.OutputFile != expectedOutputFile {
-		t.Fatalf("unexpected output file: %s", result.OutputFile)
-	}
+	assertSamePath(t, result.OutputFile, expectedOutputFile)
 
 	data, err := os.ReadFile(expectedOutputFile)
 	if err != nil {
